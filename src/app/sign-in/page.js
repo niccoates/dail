@@ -25,15 +25,16 @@ export default function SignIn() {
         redirect: false,
       })
 
-      if (result.error) {
-        throw new Error('Invalid email or password')
+      if (result?.error) {
+        setError(result.error)
+        return
       }
 
       // Redirect to root
       router.push('/')
       router.refresh()
     } catch (err) {
-      setError(err.message)
+      setError(err.message || 'An error occurred')
     } finally {
       setLoading(false)
     }

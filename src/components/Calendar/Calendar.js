@@ -16,16 +16,19 @@ import {
   parseISO
 } from 'date-fns'
 import EventPage from '../EventPage/EventPage'
+import Image from 'next/image'
 
 export default function Calendar() {
   const { data: session, status } = useSession({
     required: true,
-    refetchInterval: 5 * 60,
-    refetchOnWindowFocus: false
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    refetchInterval: 0
   })
   const [currentDate, setCurrentDate] = useState(new Date())
   const [labels, setLabels] = useState({})
   const [events, setEvents] = useState({})
+  const [birthdays, setBirthdays] = useState({})
   const [selectedDate, setSelectedDate] = useState(null)
   const [isAddingLabel, setIsAddingLabel] = useState(false)
   const [isAddingEvent, setIsAddingEvent] = useState(false)
@@ -63,6 +66,10 @@ export default function Calendar() {
         setEvents(prev => ({
           ...prev,
           ...data.events
+        }))
+        setBirthdays(prev => ({
+          ...prev,
+          ...data.birthdays
         }))
         // Remove this month from cache so it will be fetched fresh next time
         fetchedMonths.current.delete(monthKey)
@@ -244,6 +251,7 @@ export default function Calendar() {
               date={selectedDate}
               events={events}
               labels={labels}
+              birthdays={birthdays}
               onUpdate={() => fetchData(selectedDate)}
             />
           ) : (
@@ -256,8 +264,20 @@ export default function Calendar() {
                 </h1>
                 
                 <Menu as="div" className="relative pr-9">
-                  <Menu.Button className="flex items-center justify-center w-10 h-10 rounded-full border border-[#E5E7EB] bg-gray-50">
-                    <span className="text-gray-600">N</span>
+                  <Menu.Button className="flex items-center justify-center w-10 h-10 rounded-full border border-[#E5E7EB] bg-gray-50 overflow-hidden">
+                    {session?.user?.image ? (
+                      <Image
+                        src={session.user.image}
+                        alt="Profile photo"
+                        width={40}
+                        height={40}
+                        className="object-cover"
+                      />
+                    ) : (
+                      <span className="text-gray-600">
+                        {session?.user?.email?.[0].toUpperCase()}
+                      </span>
+                    )}
                   </Menu.Button>
                   <Menu.Items className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg border border-gray-200 focus:outline-none">
                     <div className="py-1">
@@ -302,6 +322,7 @@ export default function Calendar() {
                   week.map((day, dayIndex) => {
                     const dateStr = format(day, 'yyyy-MM-dd')
                     const hasEvent = events[dateStr] || labels[dateStr]
+                    const hasBirthday = birthdays[dateStr]
                     const isSelected = selectedDate && format(selectedDate, 'yyyy-MM-dd') === dateStr
                     const isCurrentMonth = isSameMonth(day, currentDate)
                     const isToday = format(new Date(), 'yyyy-MM-dd') === dateStr

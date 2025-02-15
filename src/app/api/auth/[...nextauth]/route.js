@@ -6,51 +6,82 @@ import redis from '@/lib/redis'
 export const authOptions = {
   providers: [
     CredentialsProvider({
-      name: 'Credentials',
+      name: 'credentials',
       credentials: {
-        email: { label: "Email", type: "email" },
-        password: { label: "Password", type: "password" }
+        email: { label: 'Email', type: 'email' },
+        password: { label: 'Password', type: 'password' }
       },
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) {
-          return null
+          throw new Error('Email and password are required')
         }
 
-        const user = await redis.hgetall(`user:${credentials.email}`)
-        
-        if (!user) {
-          return null
-        }
+        try {
+          // Get user from Redis
+          const userData = await redis.hget('users', credentials.email)
+          if (!userData) {
+            throw new Error('Invalid email or password')
+          }
 
-        const isPasswordValid = await bcrypt.compare(
-          credentials.password,
-          user.password
-        )
+          // Handle user data parsing
+          let user
+          try {
+            user = typeof userData === 'string' ? JSON.parse(userData) : userData
+          } catch (e) {
+            console.error('User data parsing error:', e, 'userData:', userData)
+            throw new Error('Invalid email or password')
+          }
 
-        if (!isPasswordValid) {
-          return null
-        }
+          // Verify password
+          const isValid = await bcrypt.compare(credentials.password, user.password)
+          if (!isValid) {
+            throw new Error('Invalid email or password')
+          }
 
-        return {
-          id: user.email,
-          email: user.email,
-          name: user.name,
+          // Return user without password
+          const { password, ...userWithoutPassword } = user
+          return userWithoutPassword
+        } catch (error) {
+          console.error('Auth error:', error)
+          throw error
         }
       }
     })
   ],
+  callbacks: {
+    async jwt({ token, user, trigger, session }) {
+      if (user) {
+        // Initial sign in
+        token.email = user.email
+        token.name = user.name
+        token.image = user.image
+      }
+      
+      // Handle updates to the session
+      if (trigger === 'update') {
+        token.name = session?.user?.name ?? token.name
+        token.email = session?.user?.email ?? token.email
+        token.image = session?.user?.image ?? token.image
+      }
+
+      return token
+    },
+    async session({ session, token }) {
+      if (token) {
+        session.user.email = token.email
+        session.user.name = token.name
+        session.user.image = token.image
+      }
+      return session
+    }
+  },
   pages: {
     signIn: '/sign-in',
-  },
-  callbacks: {
-    async session({ session }) {
-      return session
-    },
+    signUp: '/sign-up'
   },
   session: {
-    strategy: "jwt",
-    maxAge: 30 * 24 * 60 * 60, // 30 days
-    updateAge: 24 * 60 * 60, // 24 hours
+    strategy: 'jwt',
+    maxAge: 30 * 24 * 60 * 60 // 30 days
   }
 }
 

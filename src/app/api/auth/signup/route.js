@@ -6,17 +6,17 @@ export async function POST(req) {
   try {
     const { email, password } = await req.json()
 
-    // Basic validation
+    // Validate input
     if (!email || !password) {
       return NextResponse.json(
-        { error: 'Missing required fields' },
+        { error: 'Email and password are required' },
         { status: 400 }
       )
     }
 
     // Check if user already exists
-    const existingUser = await redis.hgetall(`user:${email}`)
-    if (existingUser?.email) {
+    const existingUser = await redis.hget('users', email)
+    if (existingUser) {
       return NextResponse.json(
         { error: 'User already exists' },
         { status: 400 }
@@ -24,23 +24,32 @@ export async function POST(req) {
     }
 
     // Hash password
-    const hashedPassword = await bcrypt.hash(password, 10)
+    const hashedPassword = await bcrypt.hash(password, 12)
 
-    // Store user in Redis (now without name)
-    await redis.hset(`user:${email}`, {
+    // Create user object
+    const user = {
       email,
       password: hashedPassword,
+      name: email.split('@')[0], // Default name from email
       createdAt: new Date().toISOString(),
-    })
+      image: null
+    }
 
-    return NextResponse.json(
-      { success: true, email },
-      { status: 201 }
-    )
+    try {
+      // Store user in Redis as a JSON string
+      await redis.hset('users', { [email]: JSON.stringify(user) })
+      return NextResponse.json({ success: true })
+    } catch (error) {
+      console.error('Redis save error:', error)
+      return NextResponse.json(
+        { error: 'Failed to create account' },
+        { status: 500 }
+      )
+    }
   } catch (error) {
     console.error('Signup error:', error)
     return NextResponse.json(
-      { error: 'Internal server error' },
+      { error: 'Failed to create account' },
       { status: 500 }
     )
   }

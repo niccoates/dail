@@ -35,6 +35,9 @@ export default function SignUp() {
       const json = await res.json()
       if (!res.ok) throw new Error(json.error || 'Something went wrong')
 
+      // Wait a moment for Redis to complete the write
+      await new Promise(resolve => setTimeout(resolve, 500))
+
       // Then immediately sign in
       const signInResult = await signIn('credentials', {
         email: data.email,
@@ -43,7 +46,8 @@ export default function SignUp() {
       })
 
       if (signInResult?.error) {
-        throw new Error('Error signing in')
+        console.error('Sign in error:', signInResult.error)
+        throw new Error('Error signing in after account creation')
       }
 
       // Redirect to root

@@ -17,10 +17,12 @@ export async function GET(req) {
     // Get both labels and events for the specified month
     const labels = await redis.hgetall(`labels:${session.user.email}:${year}-${month}`)
     const events = await redis.hgetall(`events:${session.user.email}:${year}-${month}`)
+    const birthdays = await redis.hgetall(`birthdays:${session.user.email}:${year}-${month}`)
 
     return NextResponse.json({
       labels: labels || {},  // Return empty object if null
-      events: events || {}   // Return empty object if null
+      events: events || {},   // Return empty object if null
+      birthdays: birthdays || {} // Return empty object if null
     })
   } catch (error) {
     console.error('API Error:', error)
@@ -45,7 +47,13 @@ export async function POST(req) {
       // Store label
       await redis.hset(
         `labels:${session.user.email}:${year}-${month}`,
-        { [date]: data }  // Now storing { text: string, color: string }
+        { [date]: data }
+      )
+    } else if (type === 'birthday') {
+      // Store birthday
+      await redis.hset(
+        `birthdays:${session.user.email}:${year}-${month}`,
+        { [date]: data.name }
       )
     } else if (type === 'event') {
       // Get existing events for the date
@@ -69,16 +77,26 @@ export async function POST(req) {
           }
         }
         
-        // Create new event object
-        const newEvent = {
-          startTime: data.startTime,
-          endTime: data.endTime,
-          title: data.title,
-          createdAt: new Date().toISOString()
+        if (data.createdAt) {
+          // This is an update to an existing event
+          eventsArray = eventsArray.map(event => {
+            if (event.createdAt === data.createdAt) {
+              return data
+            }
+            return event
+          })
+        } else {
+          // This is a new event
+          const newEvent = {
+            startTime: data.startTime,
+            endTime: data.endTime,
+            title: data.title,
+            createdAt: new Date().toISOString(),
+            video: data.video || null,
+            location: data.location || null
+          }
+          eventsArray.push(newEvent)
         }
-
-        // Add new event to array
-        eventsArray.push(newEvent)
 
         // Store updated events array
         const eventString = JSON.stringify(eventsArray)
