@@ -58,8 +58,20 @@ export async function POST(req) {
       
       try {
         if (existingEvents?.[date]) {
-          const parsed = JSON.parse(existingEvents[date])
-          eventsArray = Array.isArray(parsed) ? parsed : [parsed]
+          // Handle both string and object cases
+          const events = existingEvents[date]
+          if (typeof events === 'string') {
+            try {
+              const parsed = JSON.parse(events)
+              eventsArray = Array.isArray(parsed) ? parsed : [parsed]
+            } catch (e) {
+              // If JSON parsing fails, try to use the value directly
+              eventsArray = Array.isArray(events) ? events : [events]
+            }
+          } else {
+            // Handle non-string case
+            eventsArray = Array.isArray(events) ? events : [events]
+          }
         }
         
         if (data.createdAt) {

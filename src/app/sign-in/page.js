@@ -57,9 +57,6 @@ export default function SignIn() {
         <div className="w-full h-full flex flex-col items-center justify-center p-8">
           <div className="w-full max-w-sm space-y-8">
             <div className="text-left">
-              <Link href="/" className="inline-flex items-center space-x-4 mb-6">
-                <Image src="/dail.svg" alt="Dail Logo" width={30} height={30} />
-              </Link>
               <h2 className="text-2xl font-semibold text-gray-800">
               Sign in to your account
               </h2>
