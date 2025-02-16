@@ -17,12 +17,15 @@ import {
 } from 'date-fns'
 import EventPage from '../EventPage/EventPage'
 import Image from 'next/image'
+import { redirect } from 'next/navigation'
 
 export default function Calendar() {
   const { data: session, status } = useSession({
     required: true,
+    onUnauthenticated() {
+      redirect('/sign-in')
+    },
     refetchOnWindowFocus: false,
-    refetchOnReconnect: false,
     refetchInterval: 0
   })
   const [currentDate, setCurrentDate] = useState(new Date())

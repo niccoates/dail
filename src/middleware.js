@@ -8,11 +8,13 @@ export default withAuth(
   {
     callbacks: {
       authorized: ({ req, token }) => {
-        // Public paths
-        if (!req.nextUrl.pathname.startsWith('/api/')) {
+        // Public paths that don't require authentication
+        const publicPaths = ['/sign-in', '/sign-up']
+        if (publicPaths.includes(req.nextUrl.pathname)) {
           return true
         }
-        // Protected API paths
+        
+        // All other paths require authentication
         return !!token
       },
     },
@@ -20,5 +22,15 @@ export default withAuth(
 )
 
 export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon.ico).*)'],
+  matcher: [
+    /*
+     * Match all request paths except for the ones starting with:
+     * - api/auth (authentication API routes)
+     * - _next/static (static files)
+     * - _next/image (image optimization files)
+     * - favicon.ico (favicon file)
+     * - public folder
+     */
+    '/((?!api/auth|api/auth/session|_next/static|_next/image|favicon.ico|public).*)',
+  ],
 } 

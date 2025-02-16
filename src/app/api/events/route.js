@@ -12,22 +12,25 @@ export async function GET(req) {
   const { searchParams } = new URL(req.url)
   const year = searchParams.get('year')
   const month = searchParams.get('month')
+  const yearMonth = `${year}-${month}`
 
   try {
-    // Get both labels and events for the specified month
-    const labels = await redis.hgetall(`labels:${session.user.email}:${year}-${month}`)
-    const events = await redis.hgetall(`events:${session.user.email}:${year}-${month}`)
-    const birthdays = await redis.hgetall(`birthdays:${session.user.email}:${year}-${month}`)
+    // Get data using separate methods for each type
+    const [labels, events, birthdays] = await Promise.all([
+      redis.getLabels(session.user.email, yearMonth),
+      redis.getEvents(session.user.email, yearMonth),
+      redis.getBirthdays(session.user.email, yearMonth)
+    ])
 
     return NextResponse.json({
-      labels: labels || {},  // Return empty object if null
-      events: events || {},   // Return empty object if null
-      birthdays: birthdays || {} // Return empty object if null
+      labels: labels || {},
+      events: events || {},
+      birthdays: birthdays || {}
     })
   } catch (error) {
     console.error('API Error:', error)
     return NextResponse.json(
-      { error: 'Failed to fetch data', details: error.message },
+      { error: 'Failed to fetch data' },
       { status: 500 }
     )
   }
@@ -42,77 +45,41 @@ export async function POST(req) {
   try {
     const { date, type, data } = await req.json()
     const [year, month] = date.split('-')
+    const yearMonth = `${year}-${month}`
 
     if (type === 'label') {
-      // Store label
-      await redis.hset(
-        `labels:${session.user.email}:${year}-${month}`,
-        { [date]: data }
-      )
+      await redis.setLabels(session.user.email, yearMonth, date, data)
     } else if (type === 'birthday') {
-      // Store birthday
-      await redis.hset(
-        `birthdays:${session.user.email}:${year}-${month}`,
-        { [date]: data.name }
-      )
+      await redis.setBirthdays(session.user.email, yearMonth, date, data)
     } else if (type === 'event') {
-      // Get existing events for the date
-      const existingEvents = await redis.hget(`events:${session.user.email}:${year}-${month}`, date)
+      // Get existing events
+      const existingEvents = await redis.getEvents(session.user.email, yearMonth)
       let eventsArray = []
       
       try {
-        if (existingEvents) {
-          // Handle both string and object formats
-          if (typeof existingEvents === 'string') {
-            try {
-              const parsed = JSON.parse(existingEvents)
-              eventsArray = Array.isArray(parsed) ? parsed : [parsed]
-            } catch {
-              // If parsing fails, try to use the raw value
-              eventsArray = [existingEvents]
-            }
-          } else {
-            // Handle case where Redis returns an object
-            eventsArray = Array.isArray(existingEvents) ? existingEvents : [existingEvents]
-          }
+        if (existingEvents?.[date]) {
+          const parsed = JSON.parse(existingEvents[date])
+          eventsArray = Array.isArray(parsed) ? parsed : [parsed]
         }
         
         if (data.createdAt) {
-          // This is an update to an existing event
-          eventsArray = eventsArray.map(event => {
-            if (event.createdAt === data.createdAt) {
-              return data
-            }
-            return event
-          })
+          // Update existing event
+          eventsArray = eventsArray.map(event => 
+            event.createdAt === data.createdAt ? data : event
+          )
         } else {
-          // This is a new event
-          const newEvent = {
-            startTime: data.startTime,
-            endTime: data.endTime,
-            title: data.title,
-            createdAt: new Date().toISOString(),
-            video: data.video || null,
-            location: data.location || null
-          }
-          eventsArray.push(newEvent)
+          // Add new event
+          eventsArray.push({
+            ...data,
+            createdAt: new Date().toISOString()
+          })
         }
 
-        // Store updated events array
-        const eventString = JSON.stringify(eventsArray)
-        await redis.hset(
-          `events:${session.user.email}:${year}-${month}`,
-          {
-            [date]: eventString
-          }
-        )
+        // Store updated events
+        await redis.setEvents(session.user.email, yearMonth, date, eventsArray)
       } catch (error) {
-        console.error('Event processing error:', error, { 
-          existingEvents,
-          existingEventsType: typeof existingEvents,
-          existingEventsIsArray: Array.isArray(existingEvents)
-        })
-        throw new Error('Failed to process events: ' + error.message)
+        console.error('Event processing error:', error)
+        throw new Error('Failed to process events')
       }
     }
 
@@ -120,7 +87,7 @@ export async function POST(req) {
   } catch (error) {
     console.error('API Error:', error)
     return NextResponse.json(
-      { error: 'Failed to save data', details: error.message },
+      { error: 'Failed to save data' },
       { status: 500 }
     )
   }
