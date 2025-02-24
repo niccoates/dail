@@ -4,24 +4,27 @@ import { format, differenceInMinutes } from 'date-fns'
 import { useState } from 'react'
 
 const LABEL_COLORS = {
-  red: 'bg-red-50 text-red-700 ring-red-600/10',
-  blue: 'bg-blue-50 text-blue-700 ring-blue-600/10',
-  green: 'bg-green-50 text-green-700 ring-green-600/10',
-  purple: 'bg-purple-50 text-purple-700 ring-purple-600/10',
-  yellow: 'bg-yellow-50 text-yellow-700 ring-yellow-600/10',
+  red: 'bg-red-50/80 text-red-700 ring-red-600/10 dark:bg-red-500/10 dark:text-red-300 dark:ring-red-400/10',
+  blue: 'bg-blue-50/80 text-blue-700 ring-blue-600/10 dark:bg-blue-500/10 dark:text-blue-300 dark:ring-blue-400/10',
+  green: 'bg-green-50/80 text-green-700 ring-green-600/10 dark:bg-green-500/10 dark:text-green-300 dark:ring-green-400/10',
+  purple: 'bg-purple-50/80 text-purple-700 ring-purple-600/10 dark:bg-purple-500/10 dark:text-purple-300 dark:ring-purple-400/10',
+  yellow: 'bg-yellow-50/80 text-yellow-700 ring-yellow-600/10 dark:bg-yellow-500/10 dark:text-yellow-300 dark:ring-yellow-400/10',
 }
 
-export default function EventPage({ date, events, labels, birthdays, onUpdate }) {
+export default function EventPage({ date, events, labels, birthdays, onUpdate, onClose, onAddLabel, onAddBirthday }) {
   const dateStr = format(date, 'yyyy-MM-dd')
-  const dayEvents = events[dateStr] 
-    ? (typeof events[dateStr] === 'string' 
-      ? JSON.parse(events[dateStr])
-      : events[dateStr])
-    : []
-  const dayEventsArray = Array.isArray(dayEvents) ? dayEvents : [dayEvents]
+  const dayEvents = (() => {
+    try {
+      if (!events) return []
+      return typeof events === 'string' ? JSON.parse(events) : Array.isArray(events) ? events : [events]
+    } catch (error) {
+      console.error('Failed to parse events:', error)
+      return []
+    }
+  })()
   
   // Sort events by start time
-  const sortedEvents = [...dayEventsArray].sort((a, b) => {
+  const sortedEvents = [...dayEvents].sort((a, b) => {
     const [aHours, aMinutes] = a.startTime.split(':')
     const [bHours, bMinutes] = b.startTime.split(':')
     const aTime = parseInt(aHours) * 60 + parseInt(aMinutes)
@@ -30,8 +33,24 @@ export default function EventPage({ date, events, labels, birthdays, onUpdate })
   })
   
   const hasEvents = sortedEvents.length > 0
-  const hasLabels = labels[dateStr]
-  const hasBirthday = birthdays && birthdays[dateStr]
+  const hasLabels = (() => {
+    try {
+      if (!labels) return null
+      return typeof labels === 'string' ? JSON.parse(labels) : labels
+    } catch (error) {
+      console.error('Failed to parse label:', error)
+      return null
+    }
+  })()
+  const hasBirthday = (() => {
+    try {
+      if (!birthdays) return null
+      return typeof birthdays === 'string' ? JSON.parse(birthdays) : birthdays
+    } catch (error) {
+      console.error('Failed to parse birthday:', error)
+      return null
+    }
+  })()
   const [isAddingEvent, setIsAddingEvent] = useState(false)
   const [isAddingLabel, setIsAddingLabel] = useState(false)
   const [newEvent, setNewEvent] = useState({
@@ -63,28 +82,14 @@ export default function EventPage({ date, events, labels, birthdays, onUpdate })
     if (!newEvent.title.trim() || !newEvent.startTime || !newEvent.endTime) return
 
     try {
-      const res = await fetch('/api/events', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          date: dateStr,
-          type: 'event',
-          data: newEvent
-        })
+      await onAddEvent({
+        ...newEvent,
+        startTime: newEvent.startTime,
+        endTime: newEvent.endTime,
+        title: newEvent.title.trim()
       })
-
-      if (!res.ok) {
-        const error = await res.json()
-        throw new Error(error.details || 'Failed to add event')
-      }
-
-      setNewEvent({ startTime: '', endTime: '', title: '' })
+      setNewEvent({ startTime: '', endTime: '', title: '', video: null, location: null })
       setIsAddingEvent(false)
-      
-      // Call onUpdate to refresh events
-      if (onUpdate) {
-        await onUpdate()
-      }
     } catch (error) {
       console.error('Failed to add event:', error)
       alert('Failed to add event: ' + error.message)
@@ -92,29 +97,20 @@ export default function EventPage({ date, events, labels, birthdays, onUpdate })
   }
 
   const handleAddLabel = async (e) => {
-    e.preventDefault()
+    if (e) {
+      e.preventDefault()
+    }
     if (!newLabel.text.trim()) return
 
     try {
-      const res = await fetch('/api/events', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          date: dateStr,
-          type: 'label',
-          data: newLabel
-        })
+      await onAddLabel({
+        text: newLabel.text,
+        color: newLabel.color
       })
-
-      if (!res.ok) {
-        const error = await res.json()
-        throw new Error(error.details || 'Failed to add label')
-      }
 
       setNewLabel({ text: '', color: 'blue' })
       setIsAddingLabel(false)
       
-      // Call onUpdate to refresh labels
       if (onUpdate) {
         await onUpdate()
       }
@@ -125,24 +121,15 @@ export default function EventPage({ date, events, labels, birthdays, onUpdate })
   }
 
   const handleAddBirthday = async (e) => {
-    e.preventDefault()
+    if (e) {
+      e.preventDefault()
+    }
     if (!newBirthday.trim()) return
 
     try {
-      const res = await fetch('/api/events', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          date: dateStr,
-          type: 'birthday',
-          data: { name: newBirthday }
-        })
+      await onAddBirthday({
+        name: newBirthday
       })
-
-      if (!res.ok) {
-        const error = await res.json()
-        throw new Error(error.details || 'Failed to add birthday')
-      }
 
       setNewBirthday('')
       setIsAddingBirthday(false)
@@ -200,176 +187,163 @@ export default function EventPage({ date, events, labels, birthdays, onUpdate })
   return (
     <div className="h-full flex flex-col max-w-[546px] mx-auto">
       {/* Header */}
-      <div className="mb-6">
+      <div className="mb-8">
+        {/* Close button for mobile */}
+        <button
+          onClick={onClose}
+          className="md:hidden absolute top-2 right-2 p-2 text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300 rounded-full hover:bg-black/5 dark:hover:bg-white/10 transition-colors backdrop-blur-sm"
+          aria-label="Close modal"
+        >
+          <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+
         {/* Labels and Birthday Section */}
-        <div className="mb-8 mt-[-45px] flex items-center justify-between">
-          <div className="flex items-center space-x-2">
+        <div className="flex items-center justify-between space-x-4 mb-6">
+          <div className="flex items-center flex-wrap gap-2">
             {hasLabels && (
-              <span className={`inline-flex items-center rounded-full px-5 py-1 text-sm font-bold ring-1 ring-inset ${LABEL_COLORS[labels[dateStr].color]}`}>
-                {labels[dateStr].text}
+              <span className={`inline-flex items-center rounded-full px-4 py-1 text-sm font-semibold ring-1 ring-inset backdrop-blur-sm ${LABEL_COLORS[hasLabels.color]}`}>
+                {hasLabels.text}
               </span>
             )}
             {hasBirthday && (
-              <span className="inline-flex items-center rounded-full px-5 py-1 text-sm font-bold ring-1 ring-inset bg-fuchsia-50 text-fuchsia-700 ring-fuchsia-600/10">
+              <span className="inline-flex items-center rounded-full px-4 py-1 text-sm font-semibold ring-1 ring-inset backdrop-blur-sm bg-fuchsia-50/80 text-fuchsia-700 ring-fuchsia-600/10 dark:bg-fuchsia-500/10 dark:text-fuchsia-300 dark:ring-fuchsia-400/10">
                 <svg className="w-4 h-4 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 15.546c-.523 0-1.046.151-1.5.454a2.704 2.704 0 01-3 0 2.704 2.704 0 00-3 0 2.704 2.704 0 01-3 0 2.704 2.704 0 00-3 0 2.701 2.701 0 00-1.5-.454M9 6v2m3-2v2m3-2v2M9 3h.01M12 3h.01M15 3h.01M21 21v-7a2 2 0 00-2-2H5a2 2 0 00-2 2v7h18zm-3-9v-2a2 2 0 00-2-2H8a2 2 0 00-2 2v2h12z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 15.546c-.523 0-1.046.151-1.5.454a2.704 2.704 0 01-3 0 2.704 2.704 0 00-3 0 2.704 2.704 0 01-3 0 2.701 2.701 0 00-1.5-.454M9 6v2m3-2v2m3-2v2M9 3h.01M12 3h.01M15 3h.01M21 21v-7a2 2 0 00-2-2H5a2 2 0 00-2 2v7h18zm-3-9v-2a2 2 0 00-2-2H8a2 2 0 00-2 2v2h12z" />
                 </svg>
-                {birthdays[dateStr].name}'s Birthday
+                {hasBirthday.name}'s Birthday
               </span>
             )}
-            <div className="flex items-center space-x-2">
-              {!hasLabels && (
+            <div className="flex items-center gap-2">
+              {!hasLabels && !isAddingLabel && (
                 <button 
                   onClick={() => setIsAddingLabel(true)}
-                  className="inline-flex items-center rounded-full px-3 py-2  text-sm font-medium ring-1 ring-inset bg-gray-50 text-gray-600 ring-gray-200 hover:bg-gray-100 transition-colors"
+                  className="p-2 text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white rounded-full hover:bg-black/5 dark:hover:bg-white/10 transition-colors backdrop-blur-sm"
+                  title="Add label"
                 >
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4">
-                  <path fillRule="evenodd" d="M5.25 2.25a3 3 0 0 0-3 3v4.318a3 3 0 0 0 .879 2.121l9.58 9.581c.92.92 2.39 1.186 3.548.428a18.849 18.849 0 0 0 5.441-5.44c.758-1.16.492-2.629-.428-3.548l-9.58-9.581a3 3 0 0 0-2.122-.879H5.25ZM6.375 7.5a1.125 1.125 0 1 0 0-2.25 1.125 1.125 0 0 0 0 2.25Z" clipRule="evenodd" />
-                </svg>
-
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
+                    <path fillRule="evenodd" d="M5.25 2.25a3 3 0 0 0-3 3v4.318a3 3 0 0 0 .879 2.121l9.58 9.581c.92.92 2.39 1.186 3.548.428a18.849 18.849 0 0 0 5.441-5.44c.758-1.16.492-2.629-.428-3.548l-9.58-9.581a3 3 0 0 0-2.122-.879H5.25ZM6.375 7.5a1.125 1.125 0 1 0 0-2.25 1.125 1.125 0 0 0 0 2.25Z" clipRule="evenodd" />
+                  </svg>
                 </button>
               )}
               {!hasBirthday && !isAddingBirthday && (
                 <button
                   onClick={() => setIsAddingBirthday(true)}
-                  className="inline-flex items-center rounded-full px-3 py-2 text-sm font-medium ring-1 ring-inset bg-fuchsia-50 text-fuchsia-600 ring-fuchsia-200 hover:bg-fuchsia-100 transition-colors"
+                  className="p-2 text-fuchsia-600 hover:text-fuchsia-700 dark:text-fuchsia-400 dark:hover:text-fuchsia-300 rounded-full hover:bg-black/5 dark:hover:bg-white/10 transition-colors backdrop-blur-sm"
                   title="Add birthday"
                 >
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4">
-                    <path d="m15 1.784-.796.795a1.125 1.125 0 1 0 1.591 0L15 1.784ZM12 1.784l-.796.795a1.125 1.125 0 1 0 1.591 0L12 1.784ZM9 1.784l-.796.795a1.125 1.125 0 1 0 1.591 0L9 1.784ZM9.75 7.547c.498-.021.998-.035 1.5-.042V6.75a.75.75 0 0 1 1.5 0v.755c.502.007 1.002.021 1.5.042V6.75a.75.75 0 0 1 1.5 0v.88l.307.022c1.55.117 2.693 1.427 2.693 2.946v1.018a62.182 62.182 0 0 0-13.5 0v-1.018c0-1.519 1.143-2.829 2.693-2.946l.307-.022v-.88a.75.75 0 0 1 1.5 0v.797ZM12 12.75c-2.472 0-4.9.184-7.274.54-1.454.217-2.476 1.482-2.476 2.916v.384a4.104 4.104 0 0 1 2.585.364 2.605 2.605 0 0 0 2.33 0 4.104 4.104 0 0 1 3.67 0 2.605 2.605 0 0 0 2.33 0 4.104 4.104 0 0 1 3.67 0 2.605 2.605 0 0 0 2.33 0 4.104 4.104 0 0 1 2.585-.364v-.384c0-1.434-1.022-2.7-2.476-2.917A49.138 49.138 0 0 0 12 12.75ZM21.75 18.131a2.604 2.604 0 0 0-1.915.165 4.104 4.104 0 0 1-3.67 0 2.605 2.605 0 0 0-2.33 0 4.104 4.104 0 0 1-3.67 0 2.605 2.605 0 0 0-2.33 0 4.104 4.104 0 0 1-3.67 0 2.604 2.604 0 0 0-1.915-.165v2.494c0 1.035.84 1.875 1.875 1.875h15.75c1.035 0 1.875-.84 1.875-1.875v-2.494Z" />
+                  <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12 2a2 2 0 012 2c0 .74-.4 1.38-1 1.72V7h1a7 7 0 017 7v2c0 1.1-.9 2-2 2H5a2 2 0 01-2-2v-2a7 7 0 017-7h1V5.72c-.6-.34-1-.98-1-1.72a2 2 0 012-2zm0 4a5 5 0 00-5 5v4h10v-4a5 5 0 00-5-5z"/>
                   </svg>
                 </button>
               )}
-              {isAddingLabel && (
-                <form onSubmit={handleAddLabel} className="flex items-center space-x-2">
-                  <input
-                    type="text"
-                    value={newLabel.text}
-                    onChange={(e) => setNewLabel(prev => ({ ...prev, text: e.target.value }))}
-                    placeholder="Label text..."
-                    className="w-40 rounded-md border-0 px-2 py-1 text-sm text-gray-900 ring-1 ring-inset ring-gray-200 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-gray-600 outline-none"
-                    required
-                    autoFocus
-                    onKeyDown={(e) => {
-                      if (e.key === 'Escape') {
-                        setIsAddingLabel(false)
-                        setNewLabel({ text: '', color: 'blue' })
-                      }
-                    }}
-                  />
-                  <div className="flex items-center space-x-1">
-                    {Object.entries(LABEL_COLORS).map(([color, classes]) => (
-                      <button
-                        key={color}
-                        type="button"
-                        onClick={() => setNewLabel(prev => ({ ...prev, color }))}
-                        className={`w-6 h-6 rounded-full ${
-                          newLabel.color === color ? 'ring-2 ring-gray-900 ring-offset-2' : ''
-                        } ${classes.split(' ')[0]}`}
-                      />
-                    ))}
-                  </div>
-                  <div className="flex items-center space-x-1">
-                    <button
-                      type="submit"
-                      className="p-1 text-gray-500 hover:text-gray-700"
-                      title="Save label"
-                    >
-                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M5 13l4 4L19 7" />
-                      </svg>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setIsAddingLabel(false)
-                        setNewLabel({ text: '', color: 'blue' })
-                      }}
-                      className="p-1 text-gray-500 hover:text-gray-700"
-                      title="Cancel"
-                    >
-                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M6 18L18 6M6 6l12 12" />
-                      </svg>
-                    </button>
-                  </div>
-                </form>
-              )}
-              {isAddingBirthday && (
-                <form onSubmit={handleAddBirthday} className="flex items-center space-x-2">
-                  <input
-                    type="text"
-                    value={newBirthday}
-                    onChange={(e) => setNewBirthday(e.target.value)}
-                    placeholder="Name..."
-                    className="w-40 rounded-md border-0 px-2 py-1 text-sm text-gray-900 ring-1 ring-inset ring-gray-200 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-gray-600 outline-none"
-                    required
-                    autoFocus
-                    onKeyDown={(e) => {
-                      if (e.key === 'Escape') {
-                        setIsAddingBirthday(false)
-                        setNewBirthday('')
-                      }
-                    }}
-                  />
-                  <div className="flex items-center space-x-1">
-                    <button
-                      type="submit"
-                      className="p-1 text-gray-500 hover:text-gray-700"
-                      title="Save birthday"
-                    >
-                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M5 13l4 4L19 7" />
-                      </svg>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setIsAddingBirthday(false)
-                        setNewBirthday('')
-                      }}
-                      className="p-1 text-gray-500 hover:text-gray-700"
-                      title="Cancel"
-                    >
-                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M6 18L18 6M6 6l12 12" />
-                      </svg>
-                    </button>
-                  </div>
-                </form>
-              )}
             </div>
+            {isAddingLabel && (
+              <div className="flex items-center space-x-2">
+                <input
+                  type="text"
+                  value={newLabel.text}
+                  onChange={(e) => setNewLabel(prev => ({ ...prev, text: e.target.value }))}
+                  placeholder="Add label..."
+                  className="rounded-lg border-0 px-3 py-1.5 text-sm text-gray-900 dark:text-white bg-gray-50/50 dark:bg-gray-800/50 backdrop-blur-sm ring-1 ring-inset ring-gray-200/50 dark:ring-gray-700/50 placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:ring-2 focus:ring-inset focus:ring-gray-500 dark:focus:ring-gray-400 outline-none transition-shadow"
+                  autoFocus
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      handleAddLabel()
+                    } else if (e.key === 'Escape') {
+                      setIsAddingLabel(false)
+                    }
+                  }}
+                />
+                <select
+                  value={newLabel.color}
+                  onChange={(e) => setNewLabel(prev => ({ ...prev, color: e.target.value }))}
+                  className="rounded-lg border-0 px-3 py-1.5 text-sm text-gray-900 dark:text-white bg-gray-50/50 dark:bg-gray-800/50 backdrop-blur-sm ring-1 ring-inset ring-gray-200/50 dark:ring-gray-700/50 focus:ring-2 focus:ring-inset focus:ring-gray-500 dark:focus:ring-gray-400 outline-none transition-shadow"
+                >
+                  <option value="blue">Blue</option>
+                  <option value="red">Red</option>
+                  <option value="green">Green</option>
+                  <option value="purple">Purple</option>
+                  <option value="yellow">Yellow</option>
+                </select>
+                <button
+                  onClick={() => handleAddLabel()}
+                  type="button"
+                  className="p-1.5 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 rounded-full hover:bg-gray-100/50 dark:hover:bg-gray-800/50 transition-colors backdrop-blur-sm"
+                >
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M5 13l4 4L19 7" />
+                  </svg>
+                </button>
+                <button
+                  onClick={() => setIsAddingLabel(false)}
+                  type="button"
+                  className="p-1.5 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 rounded-full hover:bg-gray-100/50 dark:hover:bg-gray-800/50 transition-colors backdrop-blur-sm"
+                >
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            )}
+            {isAddingBirthday && (
+              <div className="flex items-center space-x-2">
+                <input
+                  type="text"
+                  value={newBirthday}
+                  onChange={(e) => setNewBirthday(e.target.value)}
+                  placeholder="Name..."
+                  className="rounded-lg border-0 px-3 py-1.5 text-sm text-gray-900 dark:text-white bg-gray-50/50 dark:bg-gray-800/50 backdrop-blur-sm ring-1 ring-inset ring-gray-200/50 dark:ring-gray-700/50 placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:ring-2 focus:ring-inset focus:ring-gray-500 dark:focus:ring-gray-400 outline-none transition-shadow"
+                  autoFocus
+                />
+                <button
+                  onClick={handleAddBirthday}
+                  className="p-1.5 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 rounded-full hover:bg-gray-100/50 dark:hover:bg-gray-800/50 transition-colors backdrop-blur-sm"
+                >
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M5 13l4 4L19 7" />
+                  </svg>
+                </button>
+                <button
+                  onClick={() => setIsAddingBirthday(false)}
+                  className="p-1.5 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 rounded-full hover:bg-gray-100/50 dark:hover:bg-gray-800/50 transition-colors backdrop-blur-sm"
+                >
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            )}
           </div>
         </div>
 
         <div className="flex items-baseline space-x-4">
-          <div className="flex items-baseline space-x-3">
-          <span className="text-6xl font-bold text-gray-900">
-              {format(date, 'd')}
-            </span>
-            <h1 className="text-3xl font-light text-gray-500">
-              {format(date, 'MMMM')}
-            </h1>
-          </div>
+          <span className="text-6xl font-bold text-gray-900 dark:text-white">
+            {format(date, 'd')}
+          </span>
+          <h1 className="text-3xl font-light text-gray-500 dark:text-gray-300">
+            {format(date, 'MMMM')}
+          </h1>
         </div>
       </div>
 
       {/* Events Section */}
-      <div className="mb-12">
-        <ul className="space-y-3 mb-3">
+      <div className="space-y-6">
+        <ul className="space-y-4">
           {sortedEvents.map((event, index) => (
             <li key={index} className="group">
               <div className="flex flex-col space-y-2">
                 {/* Event Header */}
                 <div className="flex items-start space-x-3 text-lg">
-                  <span className="text-gray-500">{event.startTime}</span>
-                  <span className="text-gray-300"> - </span>
-                  <span className="text-gray-500">{event.endTime}</span>
-                  <span className="text-gray-300">•</span>
+                  <span className="text-gray-500 dark:text-gray-400 font-medium">{event.startTime}</span>
+                  <span className="text-gray-300 dark:text-gray-600"> - </span>
+                  <span className="text-gray-500 dark:text-gray-400 font-medium">{event.endTime}</span>
+                  <span className="text-gray-300 dark:text-gray-600">•</span>
                   <div className="flex-1 flex items-center space-x-2">
-                    <span className="text-gray-900 font-bold">{event.title}</span>
+                    <span className="text-gray-900 dark:text-white font-bold">{event.title}</span>
                     {event.location && (
-                      <span className="text-sm text-gray-500 flex items-center space-x-1">
+                      <span className="text-sm text-gray-500 dark:text-gray-400 flex items-center space-x-1">
                         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
@@ -471,42 +445,46 @@ export default function EventPage({ date, events, labels, birthdays, onUpdate })
               </div>
             </li>
           ))}
-          <li>
-            <form onSubmit={handleAddEvent} className="flex items-center space-x-2">
-              <input
-                type="time"
-                value={newEvent.startTime}
-                onChange={(e) => setNewEvent(prev => ({ ...prev, startTime: e.target.value }))}
-                className="w-16 rounded-md border-0 px-2 py-1.5 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-200 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-gray-600 sm:text-sm sm:leading-6 outline-none"
-                required
-              />
-              <input
-                type="time"
-                value={newEvent.endTime}
-                onChange={(e) => setNewEvent(prev => ({ ...prev, endTime: e.target.value }))}
-                className="w-16 rounded-md border-0 px-2 py-1.5 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-200 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-gray-600 sm:text-sm sm:leading-6 outline-none"
-                required
-              />
-              <input
-                type="text"
-                value={newEvent.title}
-                onChange={(e) => setNewEvent(prev => ({ ...prev, title: e.target.value }))}
-                placeholder="Add event..."
-                className="flex-1 rounded-md border-0 px-2 py-1.5 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-200 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-gray-600 sm:text-sm sm:leading-6 outline-none"
-                required
-              />
-              <button
-                type="submit"
-                className="p-1.5 text-gray-500 hover:text-gray-700 transition-colors"
-                title="Save event"
-              >
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M5 13l4 4L19 7" />
-                </svg>
-              </button>
-            </form>
-          </li>
         </ul>
+
+        {/* Add Event Form */}
+        <form onSubmit={handleAddEvent} className="flex items-center space-x-3">
+          <div className="flex items-center space-x-2">
+            <input
+              type="time"
+              value={newEvent.startTime}
+              onChange={(e) => setNewEvent(prev => ({ ...prev, startTime: e.target.value }))}
+              className="w-[5.5rem] rounded-lg border-0 px-3 py-2 text-gray-900 dark:text-white bg-gray-50/50 dark:bg-gray-800/50 backdrop-blur-sm ring-1 ring-inset ring-gray-200/50 dark:ring-gray-700/50 placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:ring-2 focus:ring-inset focus:ring-gray-500 dark:focus:ring-gray-400 outline-none transition-shadow"
+              required
+            />
+            <input
+              type="time"
+              value={newEvent.endTime}
+              onChange={(e) => setNewEvent(prev => ({ ...prev, endTime: e.target.value }))}
+              className="w-[5.5rem] rounded-lg border-0 px-3 py-2 text-gray-900 dark:text-white bg-gray-50/50 dark:bg-gray-800/50 backdrop-blur-sm ring-1 ring-inset ring-gray-200/50 dark:ring-gray-700/50 placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:ring-2 focus:ring-inset focus:ring-gray-500 dark:focus:ring-gray-400 outline-none transition-shadow"
+              required
+            />
+          </div>
+          <div className="flex-1 flex items-center space-x-2">
+            <input
+              type="text"
+              value={newEvent.title}
+              onChange={(e) => setNewEvent(prev => ({ ...prev, title: e.target.value }))}
+              placeholder="Add event..."
+              className="flex-1 rounded-lg border-0 px-3 py-2 text-gray-900 dark:text-white bg-gray-50/50 dark:bg-gray-800/50 backdrop-blur-sm ring-1 ring-inset ring-gray-200/50 dark:ring-gray-700/50 placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:ring-2 focus:ring-inset focus:ring-gray-500 dark:focus:ring-gray-400 outline-none transition-shadow"
+              required
+            />
+            <button
+              type="submit"
+              className="p-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 rounded-full hover:bg-gray-100/50 dark:hover:bg-gray-800/50 transition-colors backdrop-blur-sm"
+              title="Save event"
+            >
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M5 13l4 4L19 7" />
+              </svg>
+            </button>
+          </div>
+        </form>
       </div>
     </div>
   )

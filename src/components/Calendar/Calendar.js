@@ -48,16 +48,24 @@ export default function Calendar() {
   
   // Function to get cache key for a month
   const getMonthKey = useCallback((date) => {
-    return `${format(date, 'yyyy-MM')}`
+    if (!date) return null
+    try {
+      return format(date, 'yyyy-MM')
+    } catch (error) {
+      console.error('Invalid date in getMonthKey:', error)
+      return null
+    }
   }, [])
 
   // Optimized fetch function that only fetches if not in cache
   const fetchData = useCallback(async (date) => {
-    const monthKey = getMonthKey(date)
-    const year = format(date, 'yyyy')
-    const month = format(date, 'MM')
+    if (!date) return
     
     try {
+      const year = format(date, 'yyyy')
+      const month = format(date, 'MM')
+      const monthKey = `${year}-${month}`
+      
       const res = await fetch(`/api/events?year=${year}&month=${month}`)
       
       if (res.ok) {
@@ -80,7 +88,7 @@ export default function Calendar() {
     } catch (error) {
       console.error('Failed to fetch data:', error)
     }
-  }, [getMonthKey])
+  }, [])
 
   // Fetch data for current month and adjacent months
   useEffect(() => {
@@ -134,50 +142,35 @@ export default function Calendar() {
         })
       })
 
-      if (res.ok) {
-        // Update local state after successful server update
-        setEvents(prev => {
-          const existingEvents = prev[dateStr] 
-            ? (typeof prev[dateStr] === 'string' 
-              ? JSON.parse(prev[dateStr]) 
-              : prev[dateStr])
-            : []
-          const updatedEvents = Array.isArray(existingEvents) 
-            ? [...existingEvents, { ...newEvent, createdAt: new Date().toISOString() }]
-            : [existingEvents, { ...newEvent, createdAt: new Date().toISOString() }]
-          
-          return {
-            ...prev,
-            [dateStr]: JSON.stringify(updatedEvents)
-          }
-        })
-
-        setNewEvent({ startTime: '', endTime: '', title: '' })
-        setIsAddingEvent(false)
-      } else {
+      if (!res.ok) {
         throw new Error('Failed to add event')
       }
+
+      // Update local state after successful server update
+      setEvents(prev => {
+        const existingEvents = prev[dateStr] ? JSON.parse(prev[dateStr]) : []
+        return {
+          ...prev,
+          [dateStr]: JSON.stringify([...existingEvents, { ...newEvent, createdAt: new Date().toISOString() }])
+        }
+      })
+
+      setNewEvent({ startTime: '', endTime: '', title: '' })
+      setIsAddingEvent(false)
+      
+      // Refresh data from server
+      await fetchData(currentDate)
     } catch (error) {
       console.error('Failed to add event:', error)
+      alert('Failed to add event: ' + error.message)
       // Refresh data from server in case of error
-      await fetchData(selectedDate)
+      await fetchData(currentDate)
     }
   }
 
-  const handleAddLabel = async () => {
-    if (!newLabel.trim()) return
-
+  const handleAddLabel = async (labelData) => {
     const dateStr = format(selectedDate, 'yyyy-MM-dd')
     
-    // Optimistic update
-    setLabels(prev => ({
-      ...prev,
-      [dateStr]: newLabel
-    }))
-    
-    setNewLabel('')
-    setIsAddingLabel(false)
-
     try {
       const res = await fetch('/api/events', {
         method: 'POST',
@@ -185,18 +178,65 @@ export default function Calendar() {
         body: JSON.stringify({
           date: dateStr,
           type: 'label',
-          data: { label: newLabel }
+          data: {
+            text: labelData.text,
+            color: labelData.color
+          }
         })
       })
 
-      if (!res.ok) {
-        // If server update fails, revert the optimistic update
-        await fetchData(selectedDate)
+      if (res.ok) {
+        // Update local state with the new label
+        setLabels(prev => ({
+          ...prev,
+          [dateStr]: {
+            text: labelData.text,
+            color: labelData.color
+          }
+        }))
+        // Refresh data to ensure consistency
+        await fetchData(currentDate)
+      } else {
+        throw new Error('Failed to add label')
       }
     } catch (error) {
-      // If request fails, revert the optimistic update
-      await fetchData(selectedDate)
       console.error('Failed to add label:', error)
+      await fetchData(currentDate)
+    }
+  }
+
+  const handleAddBirthday = async (birthdayData) => {
+    const dateStr = format(selectedDate, 'yyyy-MM-dd')
+    
+    try {
+      const res = await fetch('/api/events', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          date: dateStr,
+          type: 'birthday',
+          data: {
+            name: birthdayData.name
+          }
+        })
+      })
+
+      if (res.ok) {
+        // Update local state with the new birthday
+        setBirthdays(prev => ({
+          ...prev,
+          [dateStr]: {
+            name: birthdayData.name
+          }
+        }))
+        // Refresh data to ensure consistency
+        await fetchData(currentDate)
+      } else {
+        throw new Error('Failed to add birthday')
+      }
+    } catch (error) {
+      console.error('Failed to add birthday:', error)
+      await fetchData(currentDate)
     }
   }
 
@@ -212,172 +252,189 @@ export default function Calendar() {
   })
 
   return (
-    <div className="h-screen grid grid-cols-[1fr_minmax(auto,_50%)_1fr] grid-rows-[1fr_auto_1fr] overflow-hidden m-0 p-0 absolute inset-0">
-      {/* Top Row */}
-      <div className="col-span-3 border-b border-[#E5E7EB] border-dashed">
-        <div className="h-full grid grid-cols-[1fr_minmax(auto,_50%)_1fr]">
-          <div className="col-span-1" />
-          <div className="col-span-1 border-l border-r border-[#E5E7EB] border-dashed" />
-          <div className="col-span-1" />
-        </div>
-      </div>
-
-      {/* Middle Row - Main Content */}
-      <div className="col-span-1 flex items-center justify-center">
-        {showEventPage ? (
-          <button 
-            onClick={() => {
-              setShowEventPage(false)
-              setSelectedDate(null)
-            }}
-            className="text-gray-300 hover:text-gray-600"
-          >
-            <svg width="70" height="70" fill="none" viewBox="0 0 24 24">
-              <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1" d="M13.25 8.75L9.75 12L13.25 15.25" />
-            </svg>
-          </button>
-        ) : (
-          <button 
-            onClick={handlePreviousMonth} 
-            className="text-gray-300 hover:text-gray-600"
-          >
-            <svg width="70" height="70" fill="none" viewBox="0 0 24 24">
-              <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1" d="M13.25 8.75L9.75 12L13.25 15.25" />
-            </svg>
-          </button>
-        )}
-      </div>
-      <div className={`col-span-1 border-x border-[#E5E7EB] border-dashed bg-white ${showEventPage ? 'w-[700px] mx-auto' : ''}`}>
-        <div className="w-full p-8">
-          {showEventPage ? (
-            <EventPage
-              date={selectedDate}
-              events={events}
-              labels={labels}
-              birthdays={birthdays}
-              onUpdate={() => fetchData(selectedDate)}
-            />
-          ) : (
-            <>
-              {/* Calendar Header */}
-              <div className="flex justify-between items-center mb-12">
-                <h1 className="text-4xl font-medium text-gray-800 pl-9">
-                  {format(currentDate, 'MMMM')}
-                  <sup className="ml-3 text-2xl font-normal text-gray-300">'{format(currentDate, 'yy')}</sup>
-                </h1>
-                
-                <Menu as="div" className="relative pr-9">
-                  <Menu.Button className="flex items-center justify-center w-10 h-10 rounded-full border border-[#E5E7EB] bg-gray-50 overflow-hidden">
-                    {session?.user?.image ? (
-                      <Image
-                        src={session.user.image}
-                        alt="Profile photo"
-                        width={40}
-                        height={40}
-                        className="object-cover"
-                      />
-                    ) : (
-                      <span className="text-gray-600">
-                        {session?.user?.email?.[0].toUpperCase()}
-                      </span>
-                    )}
-                  </Menu.Button>
-                  <Menu.Items className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg border border-gray-200 focus:outline-none">
-                    <div className="py-1">
-                      <Menu.Item>
-                        {({ active }) => (
-                          <a
-                            href="/settings"
-                            className={`${
-                              active ? 'bg-gray-100' : ''
-                            } block px-4 py-2 text-sm text-gray-700`}
-                          >
-                            Settings
-                          </a>
-                        )}
-                      </Menu.Item>
-                      <Menu.Item>
-                        {({ active }) => (
-                          <button
-                            onClick={() => signOut()}
-                            className={`${
-                              active ? 'bg-gray-100' : ''
-                            } block w-full text-left px-4 py-2 text-sm text-gray-700`}
-                          >
-                            Sign out
-                          </button>
-                        )}
-                      </Menu.Item>
-                    </div>
-                  </Menu.Items>
-                </Menu>
+    <div className="fixed inset-0 bg-white dark:bg-black">
+      <div className="h-full w-full max-w-[2000px] mx-auto bg-white/90 dark:bg-black/90 backdrop-blur-md">
+        <div className="absolute inset-0 bg-gradient-to-b from-white/90 to-white/50 dark:from-black/90 dark:to-black/50 pointer-events-none" />
+        
+        {/* Header */}
+        <div className="sticky top-0 z-30 px-4 md:px-6 py-3 md:py-4 flex items-center justify-between border-b border-gray-200/50 dark:border-white/10 bg-white/90 dark:bg-black/90 backdrop-blur-md">
+          <div className="flex items-center space-x-4">
+            <button 
+              onClick={handlePreviousMonth}
+              className="p-2 text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white rounded-full hover:bg-black/5 dark:hover:bg-white/10 transition-colors backdrop-blur-sm"
+            >
+              <svg width="20" height="20" fill="none" viewBox="0 0 24 24" className="md:w-6 md:h-6">
+                <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 18l-6-6 6-6" />
+              </svg>
+            </button>
+            <h2 className="text-xl md:text-2xl font-semibold text-gray-900 dark:text-white">
+              {format(currentDate, 'MMMM yyyy')}
+            </h2>
+            <button 
+              onClick={handleNextMonth}
+              className="p-2 text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white rounded-full hover:bg-black/5 dark:hover:bg-white/10 transition-colors backdrop-blur-sm"
+            >
+              <svg width="20" height="20" fill="none" viewBox="0 0 24 24" className="md:w-6 md:h-6">
+                <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 18l6-6-6-6" />
+              </svg>
+            </button>
+          </div>
+          
+          <Menu as="div" className="relative">
+            <Menu.Button className="flex items-center space-x-2 p-2 text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white rounded-lg hover:bg-black/5 dark:hover:bg-white/10 transition-colors backdrop-blur-sm">
+              <div className="w-8 h-8 relative">
+                <Image 
+                  src={session?.user?.image || '/dail.png'} 
+                  alt={session?.user?.name || 'Profile'} 
+                  width={32} 
+                  height={32} 
+                  className="rounded-full object-cover"
+                  onError={(e) => {
+                    e.target.src = '/default-avatar.png'
+                  }}
+                />
               </div>
-
-              {/* Calendar Grid */}
-              <div className="grid grid-cols-7 gap-y-4 text-center">
-                {['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'].map(day => (
-                  <div key={day} className="text-sm text-gray-500">
-                    {day}
-                  </div>
-                ))}
-                
-                {weeks.map((week, weekIndex) => 
-                  week.map((day, dayIndex) => {
-                    const dateStr = format(day, 'yyyy-MM-dd')
-                    const hasEvent = events[dateStr] || labels[dateStr]
-                    const hasBirthday = birthdays[dateStr]
-                    const isSelected = selectedDate && format(selectedDate, 'yyyy-MM-dd') === dateStr
-                    const isCurrentMonth = isSameMonth(day, currentDate)
-                    const isToday = format(new Date(), 'yyyy-MM-dd') === dateStr
-
-                    return (
-                      <button
-                        key={day.toString()}
-                        onClick={() => handleDayClick(day)}
-                        className={`
-                          relative text-center py-4 mx-1 rounded-md
-                          ${!isCurrentMonth ? 'text-[#E5E7EB]' : ''}
-                          ${isSelected ? 'bg-gray-100 font-bold' : ''}
-                          ${isToday && !selectedDate ? 'bg-gray-100 font-bold' : ''}
-                          hover:bg-gray-100 transition-colors
-                        `}
-                      >
-                        <div className="flex flex-col items-center">
-                          <span className="text-lg">{format(day, 'd')}</span>
-                          {hasEvent && (
-                            <span className="w-1.5 h-1.5 bg-indigo-600 rounded-full mt-1" />
-                          )}
-                        </div>
-                      </button>
-                    )
-                  })
+              <span className="text-gray-700 dark:text-gray-200 hidden md:inline">{session?.user?.name}</span>
+            </Menu.Button>
+            <Menu.Items className="absolute right-0 mt-2 w-48 bg-white/90 dark:bg-black/90 backdrop-blur-md rounded-lg shadow-lg border border-white/20 focus:outline-none z-[100]">
+              <Menu.Item>
+                {({ active }) => (
+                  <a
+                    href="/settings"
+                    className={`${
+                      active ? 'bg-black/5 dark:bg-white/10' : ''
+                    } block px-4 py-2 text-gray-700 dark:text-gray-200`}
+                  >
+                    Settings
+                  </a>
                 )}
-              </div>
-            </>
-          )}
+              </Menu.Item>
+              <Menu.Item>
+                {({ active }) => (
+                  <button
+                    onClick={() => signOut()}
+                    className={`${
+                      active ? 'bg-black/5 dark:bg-white/10' : ''
+                    } w-full text-left px-4 py-2 text-gray-700 dark:text-gray-200`}
+                  >
+                    Sign out
+                  </button>
+                )}
+              </Menu.Item>
+            </Menu.Items>
+          </Menu>
         </div>
-      </div>
-      <div className="col-span-1 flex items-center justify-center">
-        {!showEventPage && (
-          <button 
-            onClick={handleNextMonth} 
-            className="text-gray-300 hover:text-gray-600"
-          >
-            <svg width="70" height="70" fill="none" viewBox="0 0 24 24">
-              <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1" d="M10.75 8.75L14.25 12L10.75 15.25" />
-            </svg>
-          </button>
-        )}
+
+        {/* Calendar Grid */}
+        <div className="relative z-10 p-2 md:p-6 flex-1">
+          {/* Weekday headers */}
+          <div className="grid grid-cols-7 gap-1.5 mb-1">
+            {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((day) => (
+              <div key={day} className="text-center text-xs font-medium text-gray-500 dark:text-gray-400">
+                {day}
+              </div>
+            ))}
+          </div>
+
+          {/* Calendar days */}
+          <div className="grid grid-cols-7 gap-1.5 h-[calc(100vh-8rem)] md:h-[calc(100vh-10rem)]">
+            {days.map((day, index) => {
+              const dateStr = format(day, 'yyyy-MM-dd')
+              const dayEvents = (() => {
+                try {
+                  const eventData = events[dateStr]
+                  if (!eventData) return []
+                  return typeof eventData === 'string' ? JSON.parse(eventData) : eventData
+                } catch (error) {
+                  console.error('Failed to parse events for date:', dateStr, error)
+                  return []
+                }
+              })()
+              const isCurrentMonth = isSameMonth(day, currentDate)
+              const isSelected = selectedDate && format(selectedDate, 'yyyy-MM-dd') === dateStr
+
+              return (
+                <button
+                  key={day.toString()}
+                  onClick={() => handleDayClick(day)}
+                  className={`
+                    min-h-[2.5rem] p-0.5 rounded-lg border transition-all backdrop-blur-sm
+                    ${isCurrentMonth 
+                      ? 'border-white/10 hover:border-white/20' 
+                      : 'border-transparent text-gray-400 dark:text-gray-600'
+                    }
+                    ${isSelected 
+                      ? 'bg-black/10 dark:bg-white/10 border-white/20' 
+                      : 'bg-white/50 dark:bg-black/50 hover:bg-black/5 dark:hover:bg-white/5'
+                    }
+                  `}
+                >
+                  <div className="h-full flex flex-col">
+                    <span className={`
+                      text-xs font-medium
+                      ${isCurrentMonth ? 'text-gray-900 dark:text-white' : 'text-gray-400 dark:text-gray-600'}
+                    `}>
+                      {format(day, 'd')}
+                    </span>
+                    {dayEvents.length > 0 && (
+                      <div className="mt-0.5 flex flex-col gap-0.5">
+                        {dayEvents.slice(0, 3).map((event, i) => (
+                          <div 
+                            key={i}
+                            className="h-0.5 rounded-full bg-blue-500/50 dark:bg-blue-400/50 backdrop-blur-sm"
+                          />
+                        ))}
+                        {dayEvents.length > 3 && (
+                          <span className="text-[8px] text-gray-500 dark:text-gray-400">
+                            +{dayEvents.length - 3}
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </button>
+              )
+            })}
+          </div>
+        </div>
       </div>
 
-      {/* Bottom Row */}
-      <div className="col-span-3 border-t border-[#E5E7EB] border-dashed">
-        <div className="h-full grid grid-cols-[1fr_minmax(auto,_50%)_1fr]">
-          <div className="col-span-1" />
-          <div className="col-span-1 border-l border-r border-[#E5E7EB] border-dashed" />
-          <div className="col-span-1" />
+      {/* Event Page Modal */}
+      {showEventPage && (
+        <div className="fixed inset-0 backdrop-blur-sm bg-black/30 dark:bg-black/60 flex items-center justify-center p-4 z-50">
+          <div className="bg-white/90 dark:bg-black/90 backdrop-blur-md rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden relative border border-white/20">
+            <div className="absolute inset-0 bg-gradient-to-b from-white/90 to-white/50 dark:from-black/90 dark:to-black/50 pointer-events-none" />
+            <div className="relative z-10 p-8">
+              <button
+                onClick={() => {
+                  setShowEventPage(false)
+                  setSelectedDate(null)
+                }}
+                className="absolute top-6 right-6 p-2 text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300 rounded-full hover:bg-black/5 dark:hover:bg-white/10 transition-colors backdrop-blur-sm z-10"
+                aria-label="Close modal"
+              >
+                <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+              <EventPage 
+                date={selectedDate} 
+                onClose={() => {
+                  setShowEventPage(false)
+                  setSelectedDate(null)
+                }}
+                events={events[format(selectedDate, 'yyyy-MM-dd')]}
+                labels={labels[format(selectedDate, 'yyyy-MM-dd')]}
+                birthdays={birthdays[format(selectedDate, 'yyyy-MM-dd')]}
+                onUpdate={fetchData}
+                onAddEvent={handleAddEvent}
+                onAddLabel={handleAddLabel}
+                onAddBirthday={handleAddBirthday}
+              />
+            </div>
+          </div>
         </div>
-      </div>
+      )}
     </div>
   )
 } 
