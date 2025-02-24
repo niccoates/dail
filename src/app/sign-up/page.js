@@ -61,35 +61,31 @@ export default function SignUp() {
   }
 
   return (
-    <div className="h-screen grid grid-cols-[1fr_minmax(auto,_50%)_1fr] grid-rows-[1fr_auto_1fr] overflow-hidden m-0 p-0 absolute inset-0">
-      {/* Top Row */}
-      <div className="col-span-3 border-b border-[#E5E7EB] border-dashed">
-        <div className="h-full grid grid-cols-[1fr_minmax(auto,_50%)_1fr]">
-          <div className="col-span-1" />
-          <div className="col-span-1 border-l border-r border-[#E5E7EB] border-dashed" />
-          <div className="col-span-1" />
-        </div>
-      </div>
-
-      {/* Middle Row - Main Content */}
-      <div className="col-span-1" />
-      <div className="col-span-1 border-x border-[#E5E7EB] border-dashed bg-white">
-        <div className="w-full h-full flex flex-col items-center justify-center p-8">
+    <div className="fixed inset-0 bg-white dark:bg-black">
+      <div className="h-full w-full max-w-[2000px] mx-auto bg-white/90 dark:bg-black/90 backdrop-blur-md">
+        <div className="absolute inset-0 bg-gradient-to-b from-white/90 to-white/50 dark:from-black/90 dark:to-black/50 pointer-events-none" />
+        
+        <div className="relative z-10 h-full flex flex-col items-center justify-center p-4 md:p-6">
           <div className="w-full max-w-sm space-y-8">
-            <div className="text-left">
-              <h2 className="text-2xl font-semibold text-gray-800">
+            <div className="text-center space-y-2">
+              <h1 className="text-3xl font-semibold text-gray-900 dark:text-white">
                 Create your account
-              </h2>
+              </h1>
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                Start organizing your schedule with Dail
+              </p>
             </div>
+
             <form className="space-y-6" onSubmit={handleSubmit}>
               {error && (
-                <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-md text-sm">
+                <div className="p-4 rounded-lg backdrop-blur-sm bg-red-500/10 text-red-700 dark:text-red-300 border border-red-500/20 text-sm">
                   {error}
                 </div>
               )}
+
               <div className="space-y-4">
                 <div>
-                  <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
+                  <label htmlFor="email" className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
                     Email address
                   </label>
                   <input
@@ -97,12 +93,13 @@ export default function SignUp() {
                     name="email"
                     type="email"
                     required
-                    className="block w-full rounded-md border-0 px-3 py-1.5 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-gray-600 sm:text-sm sm:leading-6 outline-none"
+                    className="block w-full rounded-lg border-0 px-3 py-2 text-gray-900 dark:text-white bg-gray-50/50 dark:bg-gray-900/50 backdrop-blur-sm ring-1 ring-inset ring-gray-200/50 dark:ring-white/10 placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:ring-2 focus:ring-inset focus:ring-gray-500 dark:focus:ring-gray-400 outline-none transition-shadow"
                     placeholder="you@example.com"
                   />
                 </div>
+
                 <div>
-                  <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">
+                  <label htmlFor="password" className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
                     Password
                   </label>
                   <input
@@ -110,7 +107,7 @@ export default function SignUp() {
                     name="password"
                     type="password"
                     required
-                    className="block w-full rounded-md border-0 px-3 py-1.5 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-gray-600 sm:text-sm sm:leading-6 outline-none"
+                    className="block w-full rounded-lg border-0 px-3 py-2 text-gray-900 dark:text-white bg-gray-50/50 dark:bg-gray-900/50 backdrop-blur-sm ring-1 ring-inset ring-gray-200/50 dark:ring-white/10 placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:ring-2 focus:ring-inset focus:ring-gray-500 dark:focus:ring-gray-400 outline-none transition-shadow"
                     placeholder="••••••••"
                   />
                 </div>
@@ -120,30 +117,25 @@ export default function SignUp() {
                 <button
                   type="submit"
                   disabled={loading}
-                  className="w-full px-6 py-2 text-base font-medium text-white bg-gray-900 rounded-md hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="w-full px-4 py-2 text-sm font-medium text-white bg-gray-900 dark:bg-white dark:text-black rounded-lg hover:bg-gray-800 dark:hover:bg-gray-100 disabled:opacity-50 transition-colors backdrop-blur-sm"
                 >
-                  {loading ? 'Creating account...' : 'Sign up'}
+                  {loading ? 'Creating account...' : 'Create account'}
                 </button>
               </div>
 
-              <div className="text-sm text-center text-gray-500">
-                Already have an account?{' '}
-                <Link href="/sign-in" className="font-medium text-gray-900 hover:text-gray-800">
-                  Sign in
+              <div className="text-sm text-center">
+                <span className="text-gray-500 dark:text-gray-400">
+                  Already have an account?{' '}
+                </span>
+                <Link 
+                  href="/sign-in" 
+                  className="font-medium text-gray-900 dark:text-white hover:text-gray-800 dark:hover:text-gray-200"
+                >
+                  Sign in instead
                 </Link>
               </div>
             </form>
           </div>
-        </div>
-      </div>
-      <div className="col-span-1" />
-
-      {/* Bottom Row */}
-      <div className="col-span-3 border-t border-[#E5E7EB] border-dashed">
-        <div className="h-full grid grid-cols-[1fr_minmax(auto,_50%)_1fr]">
-          <div className="col-span-1" />
-          <div className="col-span-1 border-l border-r border-[#E5E7EB] border-dashed" />
-          <div className="col-span-1" />
         </div>
       </div>
     </div>

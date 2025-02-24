@@ -10,7 +10,7 @@ export const metadata = {
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="en" className={GeistSans.className}>
+    <html lang="en" className={`${GeistSans.className} h-full`} suppressHydrationWarning>
       <head>
         <Script
           src="https://cdn.seline.so/seline.js"
@@ -18,12 +18,23 @@ export default function RootLayout({ children }) {
           strategy="afterInteractive"
         />
       </head>
-      <body className="m-0 p-0">
+      <body className="antialiased bg-white dark:bg-black h-full m-0">
         <AuthProvider>
           <main className="h-full">
             {children}
           </main>
         </AuthProvider>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+                document.documentElement.classList.add('dark')
+              } else {
+                document.documentElement.classList.remove('dark')
+              }
+            `,
+          }}
+        />
       </body>
     </html>
   )

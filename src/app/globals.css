@@ -8,9 +8,18 @@
   box-sizing: border-box;
 }
 
+html,
 body {
+  height: 100%;
   margin: 0;
   padding: 0;
+}
+
+#__next {
+  height: 100%;
+}
+
+body {
   min-height: 100vh;
   overflow: hidden;
   color: var(--foreground);
